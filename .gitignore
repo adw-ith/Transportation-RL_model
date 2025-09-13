@@ -1,0 +1,28 @@
+Environment variables
+Never commit your API keys or other secrets!
+.env
+
+Python virtual environment
+The user is using .ort_env, but we'll include common ones too.
+.ort_env/
+.env/
+env/
+venv/
+.venv/
+
+Python cache files and compiled files
+pycache/
+*.pyc
+*.pyo
+*.pyd
+
+Generated output files
+This will ignore the route visualization images.
+*.png
+
+IDE and editor specific files
+.vscode/
+.idea/
+
+OS-specific files
+.DS_Store
