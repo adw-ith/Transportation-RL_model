@@ -6,8 +6,12 @@ from dataclasses import dataclass
 import os
 import json
 
+# --- Configuration Model was Trained On ---
+# This MUST match the configuration used in the training script.
+TRAINED_N_PACKAGES = 10
+TRAINED_N_VEHICLES = 3
+
 # --- Core Classes (Copied from the training script) ---
-# These are required to reconstruct the model and environment structure.
 
 @dataclass
 class Package:
@@ -35,37 +39,57 @@ class LogisticsEnvironment:
         self.packages = []
         self.vehicles = []
         self.current_time = 0
-        self.packages_delivered = 0
+        self.packages_delivered_count = 0
         self.max_time = 1000
         self.max_dist = grid_size * 2
 
+        # The state size is now fixed based on the training configuration
+        self.state_size = (TRAINED_N_VEHICLES * 3) + (TRAINED_N_PACKAGES * 5) + 1
+
     def load_scenario(self, packages, vehicles):
-        """Loads a specific scenario instead of generating a random one."""
+        """Loads a specific scenario and validates it."""
+        if len(packages) > TRAINED_N_PACKAGES:
+            raise ValueError(f"Scenario has {len(packages)} packages, but model was trained on {TRAINED_N_PACKAGES}.")
+        if len(vehicles) > TRAINED_N_VEHICLES:
+            raise ValueError(f"Scenario has {len(vehicles)} vehicles, but model was trained on {TRAINED_N_VEHICLES}.")
+            
         self.packages = packages
         self.vehicles = vehicles
-        self.n_packages = len(packages)
-        self.n_vehicles = len(vehicles)
-        self.action_space_size = self.n_packages
-        self.state_size = (self.n_vehicles * 3) + (self.n_packages * 5) + 1
+        self.total_packages_in_scenario = len(packages)
         return self._get_state()
 
     def _get_state(self):
-        """Constructs the normalized state vector."""
+        """Constructs the state vector, padding it to the required training size."""
         state = []
-        for vehicle in self.vehicles:
-            state.extend([
-                vehicle.current_location[0] / self.grid_size,
-                vehicle.current_location[1] / self.grid_size,
-                min(vehicle.available_at_time / self.max_time, 1.0)
-            ])
-        for package in self.packages:
-            state.extend([
-                package.status / 2.0,
-                package.pickup_location[0] / self.grid_size,
-                package.pickup_location[1] / self.grid_size,
-                package.delivery_location[0] / self.grid_size,
-                package.delivery_location[1] / self.grid_size,
-            ])
+        
+        # Add vehicle data and pad if necessary
+        for i in range(TRAINED_N_VEHICLES):
+            if i < len(self.vehicles):
+                vehicle = self.vehicles[i]
+                state.extend([
+                    vehicle.current_location[0] / self.grid_size,
+                    vehicle.current_location[1] / self.grid_size,
+                    min(vehicle.available_at_time / self.max_time, 1.0)
+                ])
+            else:
+                # Pad with placeholder data for non-existent vehicles
+                state.extend([0.0, 0.0, 1.0]) # Location (0,0), Available now
+
+        # Add package data and pad if necessary
+        for i in range(TRAINED_N_PACKAGES):
+            if i < len(self.packages):
+                package = self.packages[i]
+                state.extend([
+                    package.status / 2.0,
+                    package.pickup_location[0] / self.grid_size,
+                    package.pickup_location[1] / self.grid_size,
+                    package.delivery_location[0] / self.grid_size,
+                    package.delivery_location[1] / self.grid_size,
+                ])
+            else:
+                # Pad with placeholder data (status=delivered)
+                state.extend([1.0, 0.0, 0.0, 0.0, 0.0])
+
         state.append(self.current_time / self.max_time)
         return np.array(state, dtype=np.float32)
 
@@ -77,13 +101,16 @@ class LogisticsEnvironment:
         available_vehicle = min(self.vehicles, key=lambda v: v.available_at_time)
         self.current_time = available_vehicle.available_at_time
         
+        # Check if the chosen action is for a package that actually exists in the scenario
         if not (0 <= action_package_id < len(self.packages)):
-            return self._get_state(), -1.0, self.packages_delivered == self.n_packages, {}
+            available_vehicle.available_at_time += 1 # Penalize by waiting
+            return self._get_state(), -1.0, self.packages_delivered_count == self.total_packages_in_scenario, {}
 
         package_to_assign = self.packages[action_package_id]
 
         if package_to_assign.status != 0 or package_to_assign.weight > available_vehicle.capacity:
-            return self._get_state(), -1.0, self.packages_delivered == self.n_packages or self.current_time >= self.max_time, {}
+            available_vehicle.available_at_time += 1
+            return self._get_state(), -1.0, self.packages_delivered_count == self.total_packages_in_scenario, {}
         
         package_to_assign.status = 1
         dist_to_pickup = self._calculate_distance(available_vehicle.current_location, package_to_assign.pickup_location)
@@ -95,9 +122,9 @@ class LogisticsEnvironment:
         available_vehicle.current_location = package_to_assign.delivery_location
         available_vehicle.available_at_time = delivery_completion_time
         package_to_assign.status = 2
-        self.packages_delivered += 1
+        self.packages_delivered_count += 1
         
-        done = self.packages_delivered == self.n_packages or delivery_completion_time >= self.max_time
+        done = self.packages_delivered_count == self.total_packages_in_scenario or delivery_completion_time >= self.max_time
         return self._get_state(), 1.0, done, {}
 
 class DQNAgent:
@@ -105,7 +132,7 @@ class DQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.learning_rate = 0.0001 # Needed for model compilation
+        self.learning_rate = 0.0001
         self.q_network = self._build_model()
 
     def _build_model(self):
@@ -142,20 +169,8 @@ def load_scenario_from_json(filepath):
     with open(filepath, 'r') as f:
         data = json.load(f)
     
-    packages = [Package(
-        id=p['id'],
-        pickup_location=tuple(p['pickup_location']),
-        delivery_location=tuple(p['delivery_location']),
-        weight=p['weight']
-    ) for p in data['packages']]
-    
-    vehicles = [Vehicle(
-        id=v['id'],
-        capacity=v['capacity'],
-        current_location=tuple(v['current_location']),
-        speed=v['speed'],
-        cost_per_km=v['cost_per_km']
-    ) for v in data['vehicles']]
+    packages = [Package(**p) for p in data['packages']]
+    vehicles = [Vehicle(**v) for v in data['vehicles']]
     
     return packages, vehicles
 
@@ -174,7 +189,7 @@ def visualize_solution(env, vehicle_routes, initial_vehicle_locs):
 
     colors = ['blue', 'orange', 'purple', 'cyan', 'magenta']
     for v_id, route in vehicle_routes.items():
-        if not route: continue
+        if not route or len(route) == 1: continue
         color = colors[v_id % len(colors)]
         plt.scatter(initial_vehicle_locs[v_id][0], initial_vehicle_locs[v_id][1], c=color, marker='*', s=200, label=f'Vehicle {v_id} Start')
         route_x, route_y = zip(*route)
@@ -195,39 +210,43 @@ if __name__ == "__main__":
     MODEL_FILE = "logistics_model.weights.h5"
     SCENARIO_FILE = "custom_scenario.json"
 
-    # 1. Load the custom scenario
-    packages, vehicles = load_scenario_from_json(SCENARIO_FILE)
-    
-    # 2. Initialize the environment and load the scenario
-    env = LogisticsEnvironment(grid_size=20)
-    state = env.load_scenario(packages, vehicles)
-    
-    # 3. Initialize the agent and load the trained model weights
-    agent = DQNAgent(env.state_size, env.action_space_size)
-    agent.load_model(MODEL_FILE)
-    
-    # 4. Run the simulation
-    initial_vehicle_locs = {v.id: v.current_location for v in env.vehicles}
-    vehicle_routes = {v.id: [v.current_location] for v in env.vehicles}
-    done = False
-    
-    print("\nRunning simulation with the trained model...")
-    while not done:
-        available_vehicle = min(env.vehicles, key=lambda v: v.available_at_time)
-        action = agent.act(state)
+    try:
+        # 1. Load the custom scenario
+        packages, vehicles = load_scenario_from_json(SCENARIO_FILE)
         
-        # Log the decision
-        package = env.packages[action]
-        print(f"Time: {env.current_time:.2f} - Vehicle {available_vehicle.id} chose to handle Package {package.id}")
+        # 2. Initialize the environment
+        env = LogisticsEnvironment(grid_size=20)
+        state = env.load_scenario(packages, vehicles)
+        
+        # 3. Initialize agent with the *fixed training configuration*
+        agent = DQNAgent(env.state_size, TRAINED_N_PACKAGES)
+        agent.load_model(MODEL_FILE)
+        
+        # 4. Run the simulation
+        initial_vehicle_locs = {v.id: v.current_location for v in env.vehicles}
+        vehicle_routes = {v.id: [v.current_location] for v in env.vehicles}
+        done = False
+        
+        print("\nRunning simulation with the trained model...")
+        while not done:
+            available_vehicle = min(env.vehicles, key=lambda v: v.available_at_time)
+            action = agent.act(state)
+            
+            # Log the decision only if it's a valid action for the current scenario
+            if 0 <= action < len(env.packages) and env.packages[action].status == 0:
+                 package = env.packages[action]
+                 print(f"Time: {env.current_time:.2f} - Vehicle {available_vehicle.id} chose to handle Package {package.id}")
+                 vehicle_routes[available_vehicle.id].append(package.pickup_location)
+                 vehicle_routes[available_vehicle.id].append(package.delivery_location)
 
-        # Record route segments
-        vehicle_routes[available_vehicle.id].append(package.pickup_location)
-        vehicle_routes[available_vehicle.id].append(package.delivery_location)
-        
-        state, _, done, _ = env.step(action)
-        
-    print("\nSimulation finished.")
-    print(f"All packages delivered by time: {env.current_time:.2f}")
+            state, _, done, _ = env.step(action)
+            
+        print("\nSimulation finished.")
+        print(f"All packages delivered by time: {env.current_time:.2f}")
 
-    # 5. Visualize the final solution
-    visualize_solution(env, vehicle_routes, initial_vehicle_locs)
+        # 5. Visualize the final solution
+        visualize_solution(env, vehicle_routes, initial_vehicle_locs)
+
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}")
+
