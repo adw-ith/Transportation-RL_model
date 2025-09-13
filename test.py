@@ -192,7 +192,7 @@ def visualize_solution(env, vehicle_routes, initial_vehicle_locs):
     plt.show()
 
 if __name__ == "__main__":
-    MODEL_FILE = "logistics_model_weights.h5"
+    MODEL_FILE = "logistics_model.weights.h5"
     SCENARIO_FILE = "custom_scenario.json"
 
     # 1. Load the custom scenario
