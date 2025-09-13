@@ -247,7 +247,7 @@ class DQNAgent:
         self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.9995
+        self.epsilon_decay = 0.9988
         self.learning_rate = 0.0001
         self.batch_size = 64
         self.q_network = self._build_model()
@@ -397,5 +397,5 @@ def train_optimizer(episodes=2000):
     plt.show()
 
 if __name__ == "__main__":
-    train_optimizer(episodes=2000)
+    train_optimizer(episodes=5000)
 
