@@ -1,8 +1,8 @@
 # --- file: config.py ---
 
 # Training settings
-EPISODES = 1000
-SAVE_PATH = "logistics_model_v2.weights.h5"
+EPISODES = 5000
+SAVE_PATH = "logistics_model_v3.weights.h5"
 
 # Agent hyperparameters
 STATE_SIZE = 145  # This should match your environment's state size

@@ -83,7 +83,7 @@ def main():
     parser.add_argument(
         "--model", 
         type=str, 
-        default="logistics_model_v2.weights.h5", 
+        default="logistics_model_v3.weights.h5", 
         help="Path to the trained model weights file."
     )
     parser.add_argument(
