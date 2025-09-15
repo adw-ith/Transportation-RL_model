@@ -320,32 +320,31 @@ class ImprovedLogisticsEnvironment:
         
         return features
     
+    # In train.py, inside the LogisticsEnvironment class
+
     def get_valid_actions_mask(self):
-        """Get mask for valid actions"""
-        vehicle = self._get_active_vehicle()
-        if not vehicle:
-            return np.zeros(self.action_space_size)
-        
-        mask = np.zeros(self.action_space_size)
-        vehicle_loc_idx = self.location_to_idx.get(vehicle.current_location, 0)
-        
-        # Valid pickup locations
+        """Returns a binary mask for valid destinations."""
+        vehicle = min(self.vehicles, key=lambda v: v.available_at_time)
+        valid_locs_names = set()
+
+        # Valid destinations are where waiting packages can be picked up
         for p in self.packages:
             if p.status == 0 and p.weight <= vehicle.current_capacity:
-                loc_idx = self.location_to_idx.get(p.pickup_location, 0)
-                if loc_idx != vehicle_loc_idx and loc_idx < self.action_space_size:
-                    mask[loc_idx] = 1
-        
-        # Valid delivery locations
+                valid_locs_names.add(p.pickup_location)
+
+        # Or where packages in the current vehicle's inventory can be delivered
         for p in vehicle.inventory:
-            loc_idx = self.location_to_idx.get(p.delivery_location, 0)
-            if loc_idx != vehicle_loc_idx and loc_idx < self.action_space_size:
-                mask[loc_idx] = 1
-        
-        # Wait action (last index) - always valid
-        mask[-1] = 1
-        
-        return mask
+            valid_locs_names.add(p.delivery_location)
+
+        mask = np.zeros(self.action_space_size)
+        for loc_name in valid_locs_names:
+            # THE FIX IS HERE: We now allow the agent to choose its current location
+            # if there is a valid pickup or delivery to be made there.
+            # The line that checked if the location was different has been removed.
+            mask[self.location_to_idx[loc_name]] = 1
+
+        # If no valid moves exist, allow all actions to avoid getting stuck
+        return mask if np.any(mask) else np.ones(self.action_space_size)
     
     def step(self, action):
         """Execute action and return new state"""

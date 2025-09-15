@@ -1,62 +1,36 @@
 {
-  "locations": [
-    "Warehouse",
-    "Distribution Hub",
-    "Customer_A",
-    "Customer_B",
-    "Customer_C"
-  ],
+  "locations": ["mumbai", "chennai", "kerala"],
   "routes": [
-    { "start": "Warehouse", "end": "Distribution Hub", "distance": 50 },
-    { "start": "Distribution Hub", "end": "Customer_A", "distance": 20 },
-    { "start": "Distribution Hub", "end": "Customer_B", "distance": 25 },
-    { "start": "Customer_A", "end": "Customer_C", "distance": 15 },
-    { "start": "Customer_B", "end": "Customer_C", "distance": 10 }
+    { "start": "mumbai", "end": "chennai", "distance": 1235.18 },
+    { "start": "mumbai", "end": "kerala", "distance": 1352.48 },
+    { "start": "chennai", "end": "mumbai", "distance": 1232.15 },
+    { "start": "chennai", "end": "kerala", "distance": 649.04 },
+    { "start": "kerala", "end": "mumbai", "distance": 1323.22 },
+    { "start": "kerala", "end": "chennai", "distance": 644.23 }
   ],
   "packages": [
     {
-      "id": 101,
-      "pickup": "Warehouse",
-      "delivery": "Customer_A",
-      "weight": 15,
-      "priority": 3
+      "id": 0,
+      "pickup": "mumbai",
+      "delivery": "chennai",
+      "weight": 3,
+      "priority": 0
     },
     {
-      "id": 102,
-      "pickup": "Warehouse",
-      "delivery": "Customer_B",
-      "weight": 10,
-      "priority": 1
-    },
-    {
-      "id": 103,
-      "pickup": "Warehouse",
-      "delivery": "Customer_C",
-      "weight": 25,
-      "priority": 1
-    },
-    {
-      "id": 104,
-      "pickup": "Customer_A",
-      "delivery": "Distribution Hub",
-      "weight": 5,
-      "priority": 2
+      "id": 1,
+      "pickup": "mumbai",
+      "delivery": "kerala",
+      "weight": 3,
+      "priority": 0
     }
   ],
   "vehicles": [
     {
       "id": 1,
-      "capacity": 50,
-      "location": "Warehouse",
+      "capacity": 1000,
+      "location": "mumbai",
       "speed": 1.0,
-      "cost_per_km": 1.5
-    },
-    {
-      "id": 2,
-      "capacity": 30,
-      "location": "Distribution Hub",
-      "speed": 1.5,
-      "cost_per_km": 2.0
+      "cost_per_km": 1.0
     }
   ]
 }
